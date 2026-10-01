@@ -1,97 +1,50 @@
-# svg2otf
+# What is this?
 
-Turn a folder of per-letter SVGs into one `.otf` font, with no manual
-clicking-around. Pure Python (`fontTools` + `svgelements`) — no FontForge
-install needed.
+Code to extract svgs from a png and create a font from the glyphs.
 
-## Install
+Run this
 
-```bash
-pip install fonttools svgelements
-```
+```python
 
-## Quick start
 
-```
-glyphs/
-  a.svg
-  b.svg
-  c.svg
-  ...
-  comma.svg
-  space.svg
-```
+from pathlib import Path
 
-```bash
-python3 svg2otf.py glyphs -o MyFont-Regular.otf \
-    --family "My Font" --style Regular
-```
+from font_maker.harvest import build_glyphs, segment
+from font_maker.svg2otf import build_font, typst_specimen
 
-## Naming your files
 
-- `a.svg` → the letter **a**. Same for any single character.
-- Standard punctuation names work too: `space.svg`, `comma.svg`,
-  `period.svg`, `hyphen.svg`, `exclam.svg`, `question.svg`, `at.svg`,
-  `ampersand.svg` — anything in the Adobe Glyph List.
-- `uni0041.svg` also works if you'd rather use codepoints.
-- **Uppercase on macOS/Windows:** since `A.svg` and `a.svg` collide on a
-  case-insensitive filesystem, name the uppercase file something else
-  (e.g. `Aup.svg`) and supply a `--mapping mapping.json` file:
-  ```json
-  { "Aup.svg": "A", "Bup.svg": "B" }
-  ```
-  (CSV works too: `filename,glyph` per line.)
+def cmd_build_font(input:str):
+    ROOT = Path(__file__).parent
 
-## How coordinates map to the font
+    project = Path(input).stem
 
-Each SVG's own canvas (its `viewBox`, or `width`/`height`) is the
-drawing area for that glyph. By default:
+    output = Path("projects",project,"otf", project + ".otf")
+    build_font(
+        input=Path("projects",input,"svg"),
+        output=output,
 
-- the **bottom** of the canvas = the baseline
-- 1 SVG unit = 1 font design unit (`--scale 1.0`)
+        upm=300,
+        svg_units_per_em=400,
+        descent=20,
+        advance_width=300,
+        fit_scale=True
+    )
 
-If you'd rather say "my canvas is 100 units tall and that means one
-em", use `--svg-units-per-em 100` and the scale is computed for you.
+    typst_specimen(Path(output).stem, Path(ROOT, f"projects/{project}/specimens"), ROOT)
 
-Advance width defaults to **ink bounding box + side bearings**
-(`--lsb`, `--rsb`, default 40/40 each) — same idea as Glyphr Studio's
-"bearings: left/right" fields, just automatic. Use
-`--width-mode canvas` if you'd rather every glyph's advance just be
-its SVG canvas width, or `--advance-width 600` to force one fixed
-width on everything (monospace-style).
+def cmd_segment(png:str,project:str):
+    segment(input=Path("raw",png),out=Path("projects",project,"raw"),thresh=0.9)
 
-## All settings
+def cmd_build_glyphs(input:str):
+    p = Path("projects",input)
+    build_glyphs(
+        work=Path(p,"raw"),
+        out=Path(p,"svg")
+    )
 
-```
-python3 svg2otf.py --help
-```
+if __name__ == "__main__":
+    cmd_build_glyphs("exam_1910")
+    cmd_build_font("exam_1910")
+    
 
-Key ones:
-- `--upm` — units per em (default 1000)
-- `--descent` — baseline-to-bottom-of-em distance (default 200, so
-  default ascent works out to 800)
-- `--family`, `--style`, `--version`
-- `--scale`, `--svg-units-per-em`, `--baseline`
-- `--width-mode {bbox,canvas}`, `--lsb`, `--rsb`, `--advance-width`
-
-## Notes on messy/hand-drawn source art
-
-- Multiple `<path>`/`<rect>`/`<circle>`/etc. elements in one file are
-  all merged into that glyph (e.g. a dot + stem for "i", or a rect and
-  a circle unioned for a bowl shape) — see `test_glyphs/b.svg` for an
-  example.
-- Counters (holes, like inside "o") work automatically as long as your
-  SVG editor exported the inner and outer contours with opposite
-  winding direction (which Illustrator/Inkscape/Figma do by default
-  for compound paths).
-- Cubic Beziers are kept as exact cubic curves in the OTF (CFF
-  outlines) — no lossy quadratic conversion, so sloppy/organic curves
-  stay faithful to your source art.
-- Open subpaths get auto-closed with a straight line back to their
-  start.
-
-## Empty/whitespace glyphs
-
-A file with no drawable shapes (e.g. an empty `space.svg`) is valid —
-it just produces an empty outline sized by the canvas width (or
-`--advance-width` if you set one).
+    ```
