@@ -2,7 +2,9 @@
 
 Code to extract svgs from a png and create a font from the glyphs.
 
-Run this
+For a simple example, see the sample code below.
+
+It assumes a folder structure with `project/font_name/raw` for the image file, `project/font_name/svg` for the svg, and so on.
 
 ```python
 
