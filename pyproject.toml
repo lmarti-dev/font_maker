@@ -1,0 +1,28 @@
+[project]
+name = "font-maker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Lucas", email = "lucas.marti@dxdt.ch" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fire>=0.7.1",
+    "fonttools>=4.63.0",
+    "opencv-python>=5.0.0.93",
+    "potracer>=0.0.4",
+    "svgelements>=1.9.6",
+    "typst>=0.15.0",
+]
+
+[project.scripts]
+font-maker = "font_maker:main"
+
+
+[tool.setuptools.package-data]
+"some-package" = ["*.typ"]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
