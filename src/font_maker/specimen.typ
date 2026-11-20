@@ -9,9 +9,10 @@
 
 #box(inset: 10pt, stroke: .1pt + black)[
   #text(size: 10pt, font: "ha-ha you scallywags!")[
-    The quick fox jumps over the lazy dog.] \
+    The quick brown fox jumps over the lazy dog.] \
   #text(size: 10pt)[
-    The quick fox jumps over the lazy dog.
+    The quick brown fox jumps over the lazy dog. \
+    THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG.
   ]
 ]
 

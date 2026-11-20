@@ -101,7 +101,16 @@ def segment_page(mask, min_area=None):
             continue
         if w > 0.5 * W or h > 0.25 * H:  # stamp ring, folds
             continue
-        comps.append({"ids": [i], "x": int(x), "y": int(y), "w": int(w), "h": int(h), "a": int(a)})
+        comps.append(
+            {
+                "ids": [i],
+                "x": int(x),
+                "y": int(y),
+                "w": int(w),
+                "h": int(h),
+                "a": int(a),
+            }
+        )
     if not comps:
         return [], lab
     big = [c for c in comps if c["a"] >= np.median([c["a"] for c in comps])]
@@ -309,10 +318,16 @@ def segment(
     (out_path / "candidates.json").write_text(json.dumps(meta, indent=1))
     lf = out_path / "labels.txt"
     if not lf.exists():
+
+        alpha = "\n".join([f"={c}" for c in list(map(chr, range(97, 123)))])
+        nums = "\n".join([f"={c}" for c in range(10)])
         lf.write_text(
             "# ID=char - one per line, e.g.  17=a   42=R "
             "(several IDs per char are fine: the most\n"
-            "# typical becomes the main glyph, the rest go to alts/)\n"
+            "# typical becomes the main glyph, the rest go to alts/)\n" 
+            +alpha+"\n"+nums,
+            encoding="utf8"
+           
         )
     print(
         f"{len(meta)} candidates -> {out_path}/   next: look at "
@@ -421,10 +436,7 @@ def build_glyphs(
         raise ValueError("naming must be either 'plain' or 'suffix'")
 
     work_path = Path(work)
-    meta = {
-        g["id"]: g
-        for g in json.loads((work_path / "candidates.json").read_text())
-    }
+    meta = {g["id"]: g for g in json.loads((work_path / "candidates.json").read_text())}
     label_map = {}
     labels_path = Path(labels) if labels else work_path / "labels.txt"
     for line in labels_path.read_text(encoding="utf-8").splitlines():
@@ -438,11 +450,7 @@ def build_glyphs(
 
     # Scale: cap height -> cap units. Use labelled capitals if we have them,
     # else median height.
-    caps = [
-        meta[i]["h"]
-        for c in "EHIKLMNTUVWXYZ"
-        for i in label_map.get(c, [])
-    ]
+    caps = [meta[i]["h"] for c in "EHIKLMNTUVWXYZ" for i in label_map.get(c, [])]
     ref = (
         float(np.median(caps))
         if caps
@@ -458,12 +466,9 @@ def build_glyphs(
 
     over = []
     for ch, ids in label_map.items():
-        up = max(
-            (meta[i]["baseline"] - meta[i]["y"]) * scale for i in ids
-        )
+        up = max((meta[i]["baseline"] - meta[i]["y"]) * scale for i in ids)
         dn = max(
-            (meta[i]["y"] + meta[i]["h"] - meta[i]["baseline"]) * scale
-            for i in ids
+            (meta[i]["y"] + meta[i]["h"] - meta[i]["baseline"]) * scale for i in ids
         )
         if up > baseline or dn > canvas - baseline:
             over.append(
@@ -488,12 +493,8 @@ def build_glyphs(
         )  # most typical instance first
         for rank, i in enumerate(ids):
             g = meta[i]
-            m = cv2.imread(
-                str(work_path / "glyphs" / f"{i:05d}.png"), 0
-            )
-            m = cv2.copyMakeBorder(
-                m, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=0
-            )
+            m = cv2.imread(str(work_path / "glyphs" / f"{i:05d}.png"), 0)
+            m = cv2.copyMakeBorder(m, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=0)
             upsample = 4  # upsample + soften -> smoother curves
             m = cv2.resize(
                 m,
@@ -502,9 +503,9 @@ def build_glyphs(
                 fy=upsample,
                 interpolation=cv2.INTER_CUBIC,
             )
-            m = (
-                cv2.GaussianBlur(m, (0, 0), upsample * 0.6) > 127
-            ).astype(np.uint8) * 255
+            m = (cv2.GaussianBlur(m, (0, 0), upsample * 0.6) > 127).astype(
+                np.uint8
+            ) * 255
 
             # crop-pixel -> page-pixel: crop origin = bbox - pad,
             # plus the 8px border added above.
@@ -539,9 +540,7 @@ def build_glyphs(
                     "width": round(width),
                     "canvas": canvas,
                     "baseline": baseline,
-                    "descent": round(
-                        (g["y"] + g["h"] - g["baseline"]) * scale
-                    ),
+                    "descent": round((g["y"] + g["h"] - g["baseline"]) * scale),
                 }
 
     if not (out_path / "space.svg").exists():
@@ -573,4 +572,3 @@ def build_glyphs(
             canvas,
             baseline,
         )
-
