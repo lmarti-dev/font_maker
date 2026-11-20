@@ -455,7 +455,11 @@ def draw_subpath(
             # Type 2 implicitly closes the current contour when a new
             # moveto occurs or when endchar is reached.  There is no need
             # for a separate closepath operator in the subroutine.
-            current = start
+            # The pen position does NOT move on close: the next relative
+            # moveto is measured from the last explicit point, so `current`
+            # must stay where it is (it only equals `start` when the path
+            # already returned there, as potrace output does).
+            pass
 
     return start, current
 
@@ -690,7 +694,10 @@ def build_font(
     subr_commands: int = DEFAULT_SUBR_COMMANDS,
     fill_gaps: bool = True,
     alphabet: str | None = None,
-    fit_scale:bool = False
+    fit_scale:bool = False,
+    uniform_scale: bool = False,
+    y_center: bool = False,
+    y_center_at: float | None = None,
 ) -> None:
     """
     Compile a folder of per-glyph SVG files into an OTF font.
@@ -727,6 +734,18 @@ def build_font(
             and/or AGL names) defining the fill order for --fill-gaps.
             Defaults to a-z, A-Z, 0-9, a few accented letters, then basic
             punctuation.
+        fit_scale: With a forced advance_width, shrink glyphs that do not
+            fit. By default each glyph is shrunk by its own factor.
+        uniform_scale: Together with fit_scale, use ONE shrink factor for
+            the whole font (the one the widest glyph needs) instead of one
+            per glyph. Glyphs keep their sizes relative to each other, i.e.
+            relative to the source PNG, so a wide dash stays wide next to a
+            narrow letter.
+        y_center: Vertically centre every glyph's ink on one line instead
+            of placing it by its baseline. Useful for ornaments, rules,
+            arrows and other things that are not letters.
+        y_center_at: The line to centre on, in font units above the
+            baseline. Default: the middle of the em box.
     """
     if width_mode not in {"bbox", "canvas"}:
         raise ValueError(
@@ -854,9 +873,11 @@ def build_font(
                 max_y = max(max_y, y1)
 
             has_ink = min_x != float("inf")
+            ink_w = (max_x - min_x) if has_ink else 0.0
+            need = 1.0  # shrink factor this glyph would need (uniform_scale)
+            defer = fit_scale and uniform_scale
 
             if width_mode == "bbox" and has_ink:
-                ink_w = max_x - min_x
 
                 # fit_scale: with a forced advance_width, shrink THIS glyph
                 # (uniformly, so its height shrinks too) if it doesn't fit.
@@ -866,10 +887,12 @@ def build_font(
                     and advance_width > lsb + rsb
                     and ink_w * effective_scale + lsb + rsb > advance_width
                 ):
-                    effective_scale *= (
+                    need = (
                         (advance_width - lsb - rsb)
                         / (ink_w * effective_scale)
                     )
+                    if not defer:
+                        effective_scale *= need
 
                 advance = (
                     advance_width
@@ -886,9 +909,9 @@ def build_font(
                     and advance_width is not None
                     and canvas_w * effective_scale > advance_width
                 ):
-                    effective_scale *= (
-                        advance_width / (canvas_w * effective_scale)
-                    )
+                    need = advance_width / (canvas_w * effective_scale)
+                    if not defer:
+                        effective_scale *= need
 
                 advance = (
                     advance_width
@@ -947,6 +970,17 @@ def build_font(
 
             _pending_shifts[glyph_name] = x_shift
 
+            if "_pending_geom" not in locals():
+                _pending_geom: dict[str, dict[str, float]] = {}
+
+            _pending_geom[glyph_name] = dict(
+                has_ink=has_ink,
+                min_x=min_x,
+                cy=(min_y + max_y) / 2 if has_ink else 0.0,
+                need=need,
+                bbox_mode=width_mode == "bbox" and has_ink,
+            )
+
         except Exception as exc:
             print(
                 f"  ! failed to prepare {svg_file.name}: {exc}",
@@ -966,6 +1000,40 @@ def build_font(
 
     if upm is None:
         upm = round(_pending[0][4])  # canvas height of the first glyph
+
+    # ---- post-pass: uniform scale and vertical centring -----------------
+    if fit_scale and uniform_scale:
+        factor = min(
+            (g["need"] for g in _pending_geom.values()),
+            default=1.0,
+        )
+        if factor < 1.0:
+            print(f"uniform scale: all glyphs x{factor:.3f}", file=sys.stderr)
+            fixed = []
+            for item in _pending:
+                (name, cp, paths, adv, ch_, base_, eff, f_) = item
+                eff *= factor
+                geom = _pending_geom[name]
+                if geom["bbox_mode"]:
+                    _pending_shifts[name] = -geom["min_x"] + lsb / eff
+                fixed.append((name, cp, paths, adv, ch_, base_, eff, f_))
+            _pending = fixed
+
+    if y_center:
+        center = (
+            float(y_center_at)
+            if y_center_at is not None
+            else upm / 2 - descent
+        )
+        fixed = []
+        for item in _pending:
+            (name, cp, paths, adv, ch_, base_, eff, f_) = item
+            geom = _pending_geom[name]
+            if geom["has_ink"]:
+                # font_y = (baseline_y - svg_y) * eff; put ink centre on `center`
+                base_ = center / eff + geom["cy"]
+            fixed.append((name, cp, paths, adv, ch_, base_, eff, f_))
+        _pending = fixed
 
     order: list[str] = [".notdef"]
     cmap: dict[int, str] = {}

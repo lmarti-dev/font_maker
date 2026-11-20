@@ -29,7 +29,10 @@ def cmd_build_font(input:str):
         svg_units_per_em=400,
         descent=20,
         advance_width=300,
-        fit_scale=True
+        fit_scale=True,
+        uniform_scale=True,  # one shrink factor for the whole font: glyphs keep their relative (PNG) sizes
+        y_center=True,       # centre every glyph's ink on one horizontal line instead of the baseline
+        # y_center_at=130,   # optional: the line to centre on, in font units above the baseline
     )
 
     typst_specimen(Path(output).stem, Path(ROOT, f"projects/{project}/specimens"), ROOT)
